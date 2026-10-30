@@ -1,0 +1,115 @@
+# Continuous integration — both halves of the product, on every push and pull request.
+#
+# Render deploys from `main`, so this is the gate in front of it. The acceptance suite runs here
+# too: a change that breaks a validation criterion fails the build rather than being discovered
+# at a factory acceptance test.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — twin, hybrid, MPC, acceptance suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Test
+        run: python -m pytest -q --junitxml=../pytest-report.xml
+      - name: Acceptance suite against the reference plants
+        run: |
+          python - <<'PY'
+          import json, sys
+          from app.validation.runner import run_all
+          failed = []
+          for pid in ("IX-OB-01", "IX-OB-02", "IX-OB-03"):
+              r = run_all(pid, tests_pass=True)
+              g = r["gate_readiness"]
+              print(f"{pid}: {r['overall_verdict']}  G1={g['G1_FAT']}  blocking={g['blocking']}")
+              if g["blocking"]:
+                  failed.append((pid, g["blocking"]))
+          if failed:
+              print("Acceptance criteria blocked:", json.dumps(failed))
+              sys.exit(1)
+          PY
+      - name: Import check
+        run: python -c "from app.main import app; print(len(app.routes), 'routes')"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pytest-report
+          path: pytest-report.xml
+
+  frontend:
+    name: Operator desk — pages, charts, mock contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package.json
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Syntax check every module
+        run: |
+          for f in $(find js -name '*.js'); do node --check "$f"; done
+          node --check scripts/capture-mock.mjs
+      - name: Test
+        run: node --test tests/app.test.mjs
+
+  acceptance-report:
+    name: Acceptance test report
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Generate
+        run: |
+          python - <<'PY'
+          from app.services.validation_service import get_validation_service
+          for pid in ("IX-OB-01", "IX-OB-02", "IX-OB-03"):
+              r = get_validation_service().report(pid, gate="G1", tests_pass=True)
+              open(f"../{r['filename']}", "w").write(r["markdown"])
+              print(pid, r["overall_verdict"], r["characters"], "characters")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-test-reports
+          path: Acceptance_Test_Report_*.md
