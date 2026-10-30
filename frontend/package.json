@@ -1,0 +1,21 @@
+{
+  "name": "ore-beneficiation-digital-twin-web",
+  "version": "1.0.0",
+  "description": "Industry-X Ore Beneficiation Digital Twin (gravity + WHIMS) \u2014 operator desk: HTML/CSS/JavaScript SPA with Plotly.js and Three.js for the FastAPI twin + MPC + ML backend",
+  "type": "module",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "config": "node scripts/write-config.mjs",
+    "build": "node scripts/write-config.mjs",
+    "test": "node --test tests/app.test.mjs",
+    "capture": "node scripts/capture-mock.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.0"
+  }
+}

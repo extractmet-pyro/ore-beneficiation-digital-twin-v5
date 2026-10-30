@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Industry-X Ore Beneficiation Digital Twin — Operator Desk</title>
+  <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <script src="config.js"></script>
+  <!-- 4.4 MB. Deferred so it never blocks first paint; charts wait for it via
+       plotlyReady() in js/charts/plots.js, and draw only when scrolled into view. -->
+  <script defer src="vendor/plotly.min.js"></script>
+  <script type="importmap">{"imports": {"three": "./vendor/three.module.min.js", "three/addons/OrbitControls.js": "./vendor/OrbitControls.js"}}</script>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar"></aside>
+    <main id="main">
+      <header id="topbar"></header>
+      <section id="view" aria-live="polite"><div class="loading">Loading operator desk…</div></section>
+      <footer id="footer">Industry-X Ore Beneficiation Digital Twin (gravity + WHIMS) · operator desk (HTML/CSS/JS · Plotly · Three.js) ·
+        twin + MPC + machine learning · Extractmet / IIT Madras · plant identities anonymised ·
+        advisory system — set-point changes require operator confirmation in the DCS</footer>
+    </main>
+  </div>
+  <div id="toasts"></div>
+  <div id="modal-root"></div>
+  <noscript>This operator desk requires JavaScript.</noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

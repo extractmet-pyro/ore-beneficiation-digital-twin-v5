@@ -1,0 +1,19 @@
+/* Design tokens — dark (default) and light themes */
+:root, [data-theme="dark"] {
+  --bg: #0b0f14; --bg2: #0e1117; --panel: #151b23; --panel2: #1b232d; --panel3: #222c38; --border: #2a3542;
+  --fg: #e6edf3; --sub: #8b98a5; --muted: #5d6b78; --accent: #29b6f6; --accent2: #00897b;
+  --ok: #43a047; --warn: #fb8c00; --alarm: #e53935; --offline: #78909c;
+  --meas: #29b6f6; --est: #ffb300; --sim: #ab47bc; --rec: #66bb6a;
+  --shadow: 0 6px 22px rgba(0,0,0,.35); --radius: 10px;
+  --font: Inter, "Segoe UI", Roboto, system-ui, sans-serif; --mono: "JetBrains Mono", Consolas, Menlo, monospace;
+  color-scheme: dark;
+}
+[data-theme="light"] {
+  --bg: #eef2f6; --bg2: #f5f7fa; --panel: #ffffff; --panel2: #f3f6f9; --panel3: #e8edf2; --border: #d5dde5;
+  --fg: #1f2a33; --sub: #5b6b78; --muted: #8a99a6; --shadow: 0 4px 16px rgba(30,50,70,.10);
+  color-scheme: light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px}
+a{color:var(--accent)} code,.mono{font-family:var(--mono)}
+::-webkit-scrollbar{width:10px;height:10px} ::-webkit-scrollbar-thumb{background:var(--panel3);border-radius:6px}

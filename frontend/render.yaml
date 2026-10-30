@@ -1,0 +1,54 @@
+# Render Blueprint for the OPERATOR DESK ALONE.
+#
+# Use this only when deploying the desk by itself from a repository whose root IS this
+# frontend folder. In the full product repository the root render.yaml is the one Render
+# reads and this file is ignored.
+services:
+  - type: web
+    name: obdt-v5-web
+    runtime: static
+    branch: main
+    buildCommand: node scripts/write-config.mjs
+    staticPublishPath: .
+    autoDeploy: true
+    pullRequestPreviewsEnabled: false
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /config.js
+        name: Cache-Control
+        value: no-cache
+      - path: /vendor/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /data/mock/*
+        name: Cache-Control
+        value: public, max-age=86400
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=604800
+      - path: /data/mock/*
+        name: Content-Type
+        value: application/octet-stream
+    envVars:
+      - key: BACKEND_BASE_URL
+        sync: false            # REQUIRED — e.g. https://obdt-v5-api.onrender.com (https, no trailing slash)
+      - key: APP_ENV
+        value: production
+      - key: MOCK_MODE
+        value: auto
+      - key: API_KEY
+        sync: false            # optional — note: visible to browser users (see guide §security)
+      - key: AUTH_MODE
+        value: none
+      - key: APP_PASSWORD
+        sync: false            # used only when AUTH_MODE=password (hashed into config.js)
+      - key: LONG_TIMEOUT_S
+        value: "240"
