@@ -1,0 +1,46 @@
+# Render Blueprint for the BACKEND ALONE.
+#
+# Use this only when deploying the API by itself from a repository whose root IS this
+# backend folder. In the full product repository the root render.yaml deploys both the
+# API and the operator desk together and is the one Render reads; this file is ignored
+# there. To create the API by hand instead, see the deployment guide, chapter 5.
+services:
+  - type: web
+    name: obdt-v5-api
+    runtime: python
+    plan: starter            # free works for demos but its fractional CPU makes /optimize slow (see guide)
+    region: singapore
+    branch: main
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 120
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: MODEL_VERSION
+        value: OBDT-2026.10.5
+      - key: DEMO_MODE
+        value: "true"
+      - key: ALLOWED_ORIGINS
+        sync: false          # set to your operator-desk URL, e.g. https://obdt-v5-web.onrender.com
+      - key: ALLOWED_ORIGIN_REGEX
+        value: https://.*\.onrender\.com
+      - key: API_KEY
+        sync: false          # optional; if set, frontend must send the same key
+      - key: HISTORIAN_TYPE
+        value: mock
+      - key: WARM_ON_START
+        value: "true"
+      - key: WARM_HYBRID
+        value: "true"
+      - key: HYBRID_SAMPLES
+        value: "320"            # drop to 140 on the free plan to halve warm-up time
+      - key: OPTIMIZER_MAX_EVALS
+        value: "240"
+      - key: MONTE_CARLO_SAMPLES
+        value: "12"

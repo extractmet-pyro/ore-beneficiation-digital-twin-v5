@@ -1,0 +1,18 @@
+# Iron-Ore (BHQ) Beneficiation Digital Twin — backend (FastAPI). Python 3.11 / 3.12.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+pydantic>=2.7,<3
+pydantic-settings>=2.3
+numpy>=1.26
+scipy>=1.11
+pandas>=2.1
+scikit-learn>=1.4
+httpx>=0.27
+python-dotenv>=1.0
+# --- tests
+pytest>=8.0
+# --- optional site integrations (install only where used):
+# asyncua>=1.1          # OPC UA
+# paho-mqtt>=2.0        # MQTT
+# confluent-kafka>=2.4  # Kafka
+# sqlalchemy>=2.0       # SQL historian (+ DB driver e.g. psycopg[binary], pyodbc)
