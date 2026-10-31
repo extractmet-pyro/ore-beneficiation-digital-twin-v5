@@ -1,68 +1,25 @@
-# Render Blueprint — BOTH services from this one repository.
+# Render Blueprint — the OPERATOR DESK (static site) only.
 #
-# This is the alternative to the default split (desk by blueprint, API by hand). To use it:
+#   Render dashboard → New + → Blueprint → connect this repository → Apply.
 #
-#     mv render.yaml render.frontend.yaml
-#     mv render.full.yaml render.yaml
-#     git add -A && git commit -m "Deploy both services from the blueprint" && git push
+# The backend is deployed separately as a Web Service (see README §"Deploying to Render", or
+# chapter 5 of the deployment guide). That split is deliberate: the API and the desk have
+# different lifecycles, different plans and different scaling needs, and keeping the API as a
+# hand-made service means a blueprint re-apply can never disturb it.
 #
-# then Render dashboard → New + → Blueprint → connect this repository → Apply.
+# To deploy BOTH from one blueprint instead, rename render.full.yaml over this file.
 #
-# `rootDir` is what lets the API and the desk live in one repository and still deploy as separate
-# services: Render runs each build inside its own folder.
+# ---------------------------------------------------------------------------------------------
+# BACKEND_BASE_URL is the one setting that matters. Render prompts for it when you apply this
+# blueprint because of `sync: false`. It must be the API service's full URL, https, with NO
+# trailing slash — for example  https://obdt-v5-api.onrender.com
 #
-# After the first apply, set the two cross-references by hand — neither URL exists until then:
-#   1. obdt-v5-api  ALLOWED_ORIGINS   → the desk's URL,  e.g. https://obdt-v5-web.onrender.com
-#   2. obdt-v5-web  BACKEND_BASE_URL  → the API's URL,   e.g. https://obdt-v5-api.onrender.com
-# Then redeploy both. Everything else is set here.
+# Get it wrong and the desk still loads, but every call fails at the network layer and it falls
+# back to the captured demonstration payloads: the desk shows "MOCK fallback, backend
+# unreachable". The build log prints a loud warning if it is left unset.
+# ---------------------------------------------------------------------------------------------
 
 services:
-  # ------------------------------------------------------------------ API + twin engine
-  - type: web
-    name: obdt-v5-api
-    runtime: python
-    plan: starter               # free works, but its fractional CPU makes the optimiser and the
-                                # validation suite slow, and it sleeps after 15 minutes
-    region: singapore
-    branch: main
-    rootDir: backend
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: >-
-      uvicorn app.main:app --host 0.0.0.0 --port $PORT
-      --workers 1 --timeout-keep-alive 180
-    healthCheckPath: /health
-    autoDeploy: true
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.3
-      - key: APP_ENV
-        value: production
-      - key: LOG_LEVEL
-        value: INFO
-      - key: MODEL_VERSION
-        value: OBDT-2026.10.5
-      - key: DEMO_MODE
-        value: "true"
-      - key: ALLOWED_ORIGINS
-        sync: false             # set to the desk URL after the first deploy
-      - key: ALLOWED_ORIGIN_REGEX
-        value: https://.*\.onrender\.com
-      - key: API_KEY
-        sync: false             # optional shared key; if set, the desk must send the same one
-      - key: HISTORIAN_TYPE
-        value: mock
-      - key: WARM_ON_START
-        value: "true"
-      - key: WARM_HYBRID
-        value: "true"
-      - key: HYBRID_SAMPLES
-        value: "320"            # drop to 140 on the free plan to halve warm-up time             # opcua | pi | mqtt | kafka | sql | csv | rest on a real plant
-      - key: OPTIMIZER_MAX_EVALS
-        value: "240"
-      - key: MONTE_CARLO_SAMPLES
-        value: "12"
-
-  # ------------------------------------------------------------------ operator desk
   - type: web
     name: obdt-v5-web
     runtime: static
@@ -103,18 +60,18 @@ services:
         destination: /index.html
     envVars:
       - key: BACKEND_BASE_URL
-        sync: false             # set to the API URL after the first deploy
+        sync: false             # REQUIRED — the API service URL, https, no trailing slash
       - key: APP_ENV
         value: production
       - key: MOCK_MODE
-        value: auto
+        value: auto             # auto = fall back to captured payloads if the API is asleep
       - key: API_KEY
-        sync: false
+        sync: false             # optional; must match the API. Visible to browser users.
       - key: AUTH_MODE
         value: none
       - key: APP_PASSWORD
-        sync: false
+        sync: false             # only used when AUTH_MODE=password
       - key: REQUEST_TIMEOUT_S
-        value: "60"
+        value: "60"             # a cold free-plan API takes ~60 s to answer its first request
       - key: LONG_TIMEOUT_S
-        value: "300"
+        value: "300"            # validation suite and hybrid training are slow on a cold start
