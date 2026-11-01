@@ -79,7 +79,9 @@ export async function render(root, ctx) {
         select([{value: 'all', label: 'All areas'}, ...areas.map(a => ({value: a, label: a}))], 'all',
           {onchange: v => { filter = v; draw(); }})), body);
       draw();
-      const tt = await api.get('tag_trend', {plant_id: pid, hours: 24, step_h: 0.25,
+      // step_h matches the pre-computed replay grid (REPLAY_STEPS_PER_HOUR); off-grid steps
+      // make the backend re-solve every sample instead of serving it from the cache.
+      const tt = await api.get('tag_trend', {plant_id: pid, hours: 24, step_h: 0.5,
         tags: '302_AIC_025,302_AIC_024,301_DIC_020,201_SIC_010,601_DIC_051,801_JIC_071'});
       const series = {};
       for (const k of Object.keys(tt)) if (!['timestamps', 'hours', 'plant_id', 'view', 'mock'].includes(k))

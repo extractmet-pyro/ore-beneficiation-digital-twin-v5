@@ -1,5 +1,5 @@
 /* Runtime configuration. On Render / Docker this file is regenerated from environment variables by
- * `node scripts/write-config.mjs` (see DEPLOY.md). Edit by hand for a simple static host. */
+ * `node scripts/write-config.mjs` (see README). Edit by hand for a simple static host. */
 window.OBDT_CONFIG = {
   BACKEND_BASE_URL: "http://localhost:8000",
   APP_ENV: "development",

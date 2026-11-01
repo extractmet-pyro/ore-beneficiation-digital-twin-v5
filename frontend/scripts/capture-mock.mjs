@@ -80,7 +80,8 @@ for (const {plant_id: pid} of plants.plants) {
   save(`${pid}__soft_sensors`, await get(`${A}/live/soft-sensors`, {plant_id: pid}));
   save(`${pid}__trend`, await get(`${A}/live/trend`, {plant_id: pid, hours: 24,
     keys: 'lump_fe_pct,lump_al2o3_pct,fines_fe_pct,fe_recovery_pct,mass_yield_pct,throughput_tph,energy_kwh_t'}));
-  save(`${pid}__tag_trend`, await get(`${A}/live/tag-trend`, {plant_id: pid, hours: 24,
+  // same parameters the Live page asks for, so the captured trace and the live one match
+  save(`${pid}__tag_trend`, await get(`${A}/live/tag-trend`, {plant_id: pid, hours: 24, step_h: 0.5,
     tags: '302_AIC_025,302_AIC_024,301_DIC_020,201_SIC_010,601_DIC_051,801_JIC_071'}));
   save(`${pid}__ts_kpis`, await get(`${A}/timeseries/kpis`, {plant_id: pid, end_h: 168, step_h: 2,
     keys: 'lump_fe_pct,lump_al2o3_pct,fines_fe_pct,fe_recovery_pct,mass_yield_pct,margin_usd_h'}));
