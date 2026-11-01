@@ -31,3 +31,8 @@ pytest-report.xml
 .idea/
 .DS_Store
 Thumbs.db
+
+# Warm cache — built by backend/scripts/precompute.py during the deploy build, never committed.
+# It is ~40 MB of trained models and replay nodes, and it is specific to a model version.
+backend/.cache/
+*.pkl
