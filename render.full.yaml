@@ -1,0 +1,123 @@
+# Render Blueprint — BOTH services from this one repository.
+#
+# This is the alternative to the default split (desk by blueprint, API by hand). To use it:
+#
+#     mv render.yaml render.frontend.yaml
+#     mv render.full.yaml render.yaml
+#     git add -A && git commit -m "Deploy both services from the blueprint" && git push
+#
+# then Render dashboard → New + → Blueprint → connect this repository → Apply.
+#
+# `rootDir` is what lets the API and the desk live in one repository and still deploy as separate
+# services: Render runs each build inside its own folder.
+#
+# After the first apply, set the two cross-references by hand — neither URL exists until then:
+#   1. obdt-v5-api  ALLOWED_ORIGINS   → the desk's URL,  e.g. https://obdt-v5-web.onrender.com
+#   2. obdt-v5-web  BACKEND_BASE_URL  → the API's URL,   e.g. https://obdt-v5-api.onrender.com
+# Then redeploy both. Everything else is set here.
+
+services:
+  # ------------------------------------------------------------------ API + twin engine
+  - type: web
+    name: obdt-v5-api
+    runtime: python
+    plan: starter               # free works — the build pre-trains every model, so start-up is
+                                # under a second either way — but free sleeps after 15 minutes
+                                # of inactivity and wakes in 50-60 s
+    region: singapore
+    branch: main
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt && python scripts/precompute.py
+    startCommand: >-
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT
+      --workers 1 --timeout-keep-alive 180
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: MODEL_VERSION
+        value: OBDT-2026.10.5
+      - key: DEMO_MODE
+        value: "true"
+      - key: ALLOWED_ORIGINS
+        sync: false             # set to the desk URL after the first deploy
+      - key: ALLOWED_ORIGIN_REGEX
+        value: https://.*\.onrender\.com
+      - key: API_KEY
+        sync: false             # optional shared key; if set, the desk must send the same one
+      - key: HISTORIAN_TYPE
+        value: mock             # opcua | pi | mqtt | kafka | sql | csv | rest on a real plant
+      - key: WARM_ON_START
+        value: "true"
+      - key: WARM_HYBRID
+        value: "true"
+      - key: HYBRID_SAMPLES
+        value: "320"            # drop to 140 to halve the hybrid part of the build
+      - key: REPLAY_STEPS_PER_HOUR
+        value: "2"              # half-hourly replay grid; drop to 1 if the build times out
+      - key: OPTIMIZER_MAX_EVALS
+        value: "240"
+      - key: MONTE_CARLO_SAMPLES
+        value: "12"
+
+  # ------------------------------------------------------------------ operator desk
+  - type: web
+    name: obdt-v5-web
+    runtime: static
+    branch: main
+    rootDir: frontend
+    buildCommand: node scripts/write-config.mjs
+    staticPublishPath: .
+    autoDeploy: true
+    pullRequestPreviewsEnabled: false
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /config.js
+        name: Cache-Control
+        value: no-cache
+      - path: /vendor/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /data/mock/*
+        name: Cache-Control
+        value: public, max-age=86400
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=604800
+      - path: /data/mock/*
+        name: Content-Type
+        value: application/octet-stream
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: BACKEND_BASE_URL
+        sync: false             # set to the API URL after the first deploy
+      - key: APP_ENV
+        value: production
+      - key: MOCK_MODE
+        value: auto
+      - key: API_KEY
+        sync: false
+      - key: AUTH_MODE
+        value: none
+      - key: APP_PASSWORD
+        sync: false
+      - key: REQUEST_TIMEOUT_S
+        value: "60"
+      - key: LONG_TIMEOUT_S
+        value: "300"

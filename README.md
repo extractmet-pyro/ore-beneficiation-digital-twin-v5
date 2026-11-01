@@ -87,6 +87,7 @@ cd backend
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
+python scripts/precompute.py                           # ~5 min once; optional but worth it
 uvicorn app.main:app --reload --port 8000              # docs at http://localhost:8000/docs
 
 # operator desk, in a second terminal
@@ -97,6 +98,13 @@ node scripts/serve.mjs                                 # http://localhost:8080
 
 The desk reads `config.js`. For local use the committed file already points at
 `http://localhost:8000`; on Render it is written at build time from the environment.
+
+`precompute.py` trains the hybrid models, the ML registry, the MPC step-response identification
+and the 168 h replay history once and
+caches them under `backend/.cache/` (~25 MB, gitignored). Skip it and the server starts fine —
+each layer is then built on first use, which on a full core costs a few seconds per page and on
+a fractional-CPU host costs minutes. Re-run it after changing the twin, the hybrid layer or
+`MODEL_VERSION`; a cache that does not match the running code is ignored rather than served.
 
 ### Tests
 
@@ -154,8 +162,13 @@ both: each build runs inside its own folder.
 
 | Service | Type | Root | Free plan? |
 |---|---|---|---|
-| `obdt-v5-api` | Python web service | `backend` | Works, but a cold start takes ~60 s and the optimiser and validation suite are slow on fractional CPU |
+| `obdt-v5-api` | Python web service | `backend` | Usable. Every model is trained during the build, so start-up is ~0.4 s. But free sleeps after 15 min and wakes in 50–60 s |
 | `obdt-v5-web` | Static site | `frontend` | Yes — global CDN, no cold start |
+
+> The API build command **must** end in `&& python scripts/precompute.py`. That step trains the
+> hybrid layer, the ML registry and the replay history on the build machine and writes them into
+> the image, so the instance loads them in a third of a second instead of spending minutes of
+> fractional CPU training them while requests queue. `DEPLOY.md` has the measured numbers.
 
 ### 3 · Close the loop between them
 

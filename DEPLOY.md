@@ -27,7 +27,7 @@ Render → **New +** → **Web Service** → connect the repository.
 | **Root Directory** | **`backend`** |
 | Language | Python 3 |
 | Branch | `main` |
-| Build Command | `pip install --upgrade pip && pip install -r requirements.txt` |
+| Build Command | `pip install --upgrade pip && pip install -r requirements.txt && python scripts/precompute.py` |
 | Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 180` |
 | Health Check Path | `/health` |
 | Region | Singapore |
@@ -37,6 +37,13 @@ Render → **New +** → **Web Service** → connect the repository.
 >
 > **`--port $PORT` is mandatory.** Render assigns the port at runtime; a hard-coded 8000 fails
 > the health check and the deploy hangs.
+>
+> **`python scripts/precompute.py` is what makes the free plan usable.** It trains the hybrid
+> models, the ML registry and the whole replay history during the **build**, on the build
+> machine, and writes them into the image. The service then loads them in about a third of a
+> second instead of spending minutes of a tenth of a core training them while your requests
+> queue behind. Expect the build to take **five to seven minutes**; the deploy log prints each
+> stage. Drop it and everything still works, just slowly — see *Performance* below.
 
 Environment variables:
 
@@ -51,9 +58,14 @@ Environment variables:
 | `ALLOWED_ORIGIN_REGEX` | `https://.*\.onrender\.com` |
 | `WARM_ON_START` | `true` |
 | `WARM_HYBRID` | `true` |
-| `HYBRID_SAMPLES` | `320` — use `140` on the free plan |
+| `HYBRID_SAMPLES` | `320` |
+| `REPLAY_STEPS_PER_HOUR` | `2` — drop to `1` only if the build times out |
 | `OPTIMIZER_MAX_EVALS` | `240` — use `120` on the free plan |
 | `ALLOWED_ORIGINS` | *leave blank, set in step D* |
+
+The last two are the only ones worth touching for the free plan, and neither is about start-up —
+the build handles that. `OPTIMIZER_MAX_EVALS` governs the constrained search, which runs on
+request and cannot be precomputed.
 
 Wait for **Live**, then:
 
@@ -63,9 +75,16 @@ curl https://<your-api>.onrender.com/health
 
 Expect `"status":"ok"` and `"version":"OBDT-2026.10.5"`. **Copy that URL.**
 
-The service answers `/health` within about 25 ms of start. It then spends two to three minutes
-warming models on a background thread — watch the log for `validation runs warmed`. Until that
-line appears the heavy pages still work, just slowly.
+Watch the start-up log. You want to see this, and it should take under a second:
+
+```
+warm cache loaded in 0.31s (24.7 MB, built …): 4 hybrid models, 5 ML models, 1011 replay nodes, 3 MPC identifications, 3 validation runs
+warm-up complete
+```
+
+If instead you see `no warm cache at … — layers will be built on demand`, the precompute step
+did not run or did not match. The service still works; it will just be slow for the first few
+minutes. Check the build log for the `precompute complete` line.
 
 ---
 
@@ -125,32 +144,82 @@ If that prints `http://localhost:8000`, step C.2 is your entire problem.
 
 ## Performance
 
-Measured on one full core. A free Render instance is roughly ten to twenty times slower, which
-is why the warm-up matters so much there.
+### What was slow, and what fixed it
 
-| First request to… | Lazy (before) | Warmed (now) |
+Two separate problems, both now fixed.
+
+**1 · Models were trained on the running instance.** Three minutes of CPU at start-up. A full
+core absorbs that; a free instance is about a tenth of a core, so it became roughly half an hour
+of saturated CPU during which every request queued behind the training. Warming at start-up
+made the free plan *worse*, not better. The work now happens in the build.
+
+**2 · The hourly caches were being missed.** The replay history is cached per plant and per
+hour. Several pages swept their window from the current fractional hour — `13.47, 14.47, …` —
+which matched no cached node, so each chart re-solved the twin twenty-four times over. Those
+sweeps are now snapped onto the cached grid, and the grid is built half-hourly to match the
+finest step any page asks for.
+
+First request to each endpoint, measured on one full core, no cache priming:
+
+| Endpoint | Before | After |
 |---|---|---|
-| `/hybrid/config` | 25 300 ms | **41 ms** |
-| `/hybrid/compare` | 30 200 ms | **3 ms** |
-| `/validation/run` (full suite) | 37 400 ms | **61 ms** |
-| `/mpc/identification` | 3 600 ms | **7 ms** |
-| `/simulation/run` | 158 ms | **23 ms** |
+| Start-up warm-up | 188 000 ms | **330 ms** |
+| `/validation/run` (full acceptance suite) | 37 400 ms | **7 ms** |
+| `/hybrid/compare` | 30 200 ms | **4 ms** |
+| `/hybrid/config` | 25 300 ms | **4 ms** |
+| `/diagnostics/residuals` | 9 765 ms | **30 ms** |
+| `/data-quality/report` | 9 186 ms | **56 ms** |
+| `/live/tag-trend` (6 tags, 24 h, 30 min step) | 7 350 ms | **74 ms** |
+| `/live/trend` | 4 616 ms | **4 ms** |
+| `/overview/shifts` | 4 541 ms | **4 ms** |
+| `/ml/anomaly` | 3 204 ms | **294 ms** |
+| `/mpc/identification` | 2 806 ms | **6 ms** |
+| `/plant3d/model` | 8 ms | **8 ms** |
+| `/simulation/run` | 158 ms | **173 ms** |
 
-Peak memory is **260 MB**, inside the free plan's 512 MB. The binding constraint on free is CPU,
-not memory.
+The last two rows are there on purpose. The 3-D scene and the circuit solve were never the
+problem and are not faster now — a single solve has always been about 150 ms. Everything that
+*was* slow was slow because it was training a model or re-solving a cached hour, and that is
+what moved to the build.
 
-**Before a client demonstration**, on the free plan:
+Scale the rest by ten to twenty for a free instance: the slowest page becomes a few seconds
+rather than the better part of a minute. Peak resident memory is **297 MB** against the free
+plan's 512 MB, with the warm cache loaded. Memory is not the binding constraint; CPU is, and the
+build now carries almost all of it.
 
-```bash
-curl https://<api>.onrender.com/health          # wake it, then wait for the warm-up in the log
-```
+### What the free plan still cannot do
 
-Free instances sleep after 15 minutes of inactivity, and a cold start re-runs the warm-up. For
-anything you are being watched during, use Starter — it does not idle.
+Being straight with you, because no amount of tuning changes these:
 
-**If warm-up is too slow on free**, set `HYBRID_SAMPLES=140`. That halves the design of
-experiments behind the hybrid models. The models are slightly less well fitted; the gating
-behaviour and every acceptance criterion are unaffected.
+- **It sleeps after 15 minutes of inactivity.** Waking it takes **50 to 60 seconds**, and that is
+  Render starting the container, not our code. Nothing in this repository can shorten it.
+- **It is a shared fractional CPU.** `/optimization/search` and `/mpc/closed-loop` genuinely
+  compute on request and cannot be precomputed; expect a few seconds each.
+
+Three ways to live with that, in order of what I would actually do:
+
+| | What | Cost | Good for |
+|---|---|---|---|
+| **1** | **`MOCK_MODE=true` on the desk** | free | A client demonstration. The desk serves its captured payloads, every page opens instantly, nothing can be asleep. The 3-D model, the hybrid attribution, the acceptance report — all of it works. What you lose is running *new* scenarios. |
+| **2** | **Free, woken beforehand** | free | Your own evaluation. `curl https://<api>/health` and wait for `warm cache loaded`, then it is responsive until it idles out. |
+| **3** | **Starter, $7/month** | $7/mo | Anything you are being watched during. No sleeping, a full CPU share, and it is the only one of the three where a prospect clicking around unannounced sees the system at its best. |
+
+For a client demonstration specifically: **use 1 or 3, never 2.** A 60-second blank page while a
+free instance wakes is the worst possible first impression of a system whose whole argument is
+that it responds fast enough to sit beside a control room.
+
+### If the build times out
+
+The precompute step takes five to seven minutes, most of it the replay grid. Set
+`REPLAY_STEPS_PER_HOUR=1` on the API service and rebuild: the build drops to about two minutes
+and the cache to about 13 MB. The cost is that the Live page's instrument board — the only chart
+that samples sub-hourly — goes back to solving its own snapshots. Everything else is unaffected.
+
+Raising it above `2` is not worth it. Each step doubles both the build time and the cache's
+resident memory, and no page in the desk samples finer than half-hourly.
+
+`HYBRID_SAMPLES=140` halves the hybrid part of the build. The models are slightly less well
+fitted; the gating behaviour and every acceptance criterion are unaffected.
 
 ---
 
