@@ -11,7 +11,7 @@ services:
     plan: starter            # free works for demos but its fractional CPU makes /optimize slow (see guide)
     region: singapore
     branch: main
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt && python scripts/precompute.py
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 120
     healthCheckPath: /health
     autoDeploy: true
@@ -38,6 +38,8 @@ services:
         value: "true"
       - key: WARM_HYBRID
         value: "true"
+      - key: REPLAY_STEPS_PER_HOUR
+        value: "2"
       - key: HYBRID_SAMPLES
         value: "320"            # drop to 140 on the free plan to halve warm-up time
       - key: OPTIMIZER_MAX_EVALS
