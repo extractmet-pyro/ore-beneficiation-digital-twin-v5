@@ -99,7 +99,7 @@ class MLService:
         end = current_hour()
         rows = []
         for i in range(int(hours / step_h)):
-            h = (end - hours + i * step_h) % REPLAY_HOURS
+            h = float(int(end - hours + i * step_h) % REPLAY_HOURS)
             snap = hist.truth(plant_id, h)
             sc = reg.score_anomaly(_features_from_snapshot(snap))
             rows.append({"hour": round(h, 2), "timestamp": snap["timestamp"], **sc,

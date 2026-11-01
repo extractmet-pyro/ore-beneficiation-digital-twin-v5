@@ -17,7 +17,30 @@ def current_hour() -> float:
     return float((now.timestamp() / 3600.0) % REPLAY_HOURS)
 
 
+def whole_hour(h: float) -> float:
+    """Snap an hour onto the replay's whole-hour grid.
+
+    The replay is cached per (plant, hour) and pre-computed on whole hours. A sweep that starts
+    at a fractional hour therefore misses on every single sample and rebuilds snapshots that
+    already exist - the difference between a page that opens in 100 ms and one that takes ten
+    seconds. Use this for any window sampled at an hour or coarser; sub-hourly tag trends
+    genuinely need the intermediate points and should not use it.
+    """
+    return float(int(h) % REPLAY_HOURS)
+
+
 class LiveService:
+    """Live snapshot, KPI trends and instrument traces off the replay.
+
+    Instrument traces are sampled every quarter hour on purpose - an operator reading a density
+    loop wants to see it move - so they cannot be snapped to the whole-hour grid the replay
+    cache is built on, and the first view of a window pays for the intermediate snapshots. The
+    result is memoised on the replay hour, so every later view inside that hour is free.
+    """
+
+    def __init__(self) -> None:
+        self._tag_trend: dict[tuple, dict] = {}
+
     def snapshot(self, plant_id: str, hour: float | None = None) -> dict:
         h = current_hour() if hour is None else float(hour)
         hist = get_historian()
@@ -76,12 +99,12 @@ class LiveService:
             rows.append({**row, "measured": None if actual is None else round(float(actual), 4), "error": err})
         return rows
 
-    def trend(self, plant_id: str, keys: list[str], hours: float = 24.0, step_h: float = 0.5,
+    def trend(self, plant_id: str, keys: list[str], hours: float = 24.0, step_h: float = 1.0,
               view: str = "truth") -> dict:
         end = current_hour()
-        start = end - hours
         hist = get_historian()
-        out = hist.kpi_series(plant_id, keys, start_h=start % REPLAY_HOURS, end_h=start % REPLAY_HOURS + hours,
+        start = whole_hour(end - hours) if step_h >= 1.0 else (end - hours) % REPLAY_HOURS
+        out = hist.kpi_series(plant_id, keys, start_h=start, end_h=start + hours,
                               step_h=step_h, view=view)
         for k in keys:
             vals = [v for v in out.get(k, []) if v is not None]
@@ -93,9 +116,16 @@ class LiveService:
     def tag_trend(self, plant_id: str, tags: list[str], hours: float = 24.0, step_h: float = 0.25,
                   view: str = "measurement") -> dict:
         end = current_hour()
-        start = (end - hours) % REPLAY_HOURS
-        return {"plant_id": plant_id, "view": view,
-                **get_historian().series(plant_id, tags, start_h=start, end_h=start + hours, step_h=step_h, view=view)}
+        key = (plant_id, tuple(tags), float(hours), float(step_h), view, int(end))
+        cached = self._tag_trend.get(key)
+        if cached is not None:
+            return cached
+        start = whole_hour(end - hours)          # whole-hour anchor, sub-hourly samples within it
+        out = {"plant_id": plant_id, "view": view,
+               **get_historian().series(plant_id, tags, start_h=start, end_h=start + hours,
+                                        step_h=step_h, view=view)}
+        self._tag_trend = {key: out}             # one window per replay hour is all that is asked for
+        return out
 
 
 _service: LiveService | None = None

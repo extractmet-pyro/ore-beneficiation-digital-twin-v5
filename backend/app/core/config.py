@@ -52,8 +52,20 @@ class Settings(BaseSettings):
     # The hybrid and validation layers train models on first use. Left lazy, the first operator
     # to open those pages waits for the whole build; on a fractional-CPU host that is minutes.
     # Warming them in a background thread at start-up moves that cost off the request path.
-    WARM_ON_START: bool = Field(True, description="Pre-build replay cache, ML registry and hybrid models at start-up")
-    WARM_HYBRID: bool = Field(True, description="Include the hybrid and ML models in the warm-up (the slow part)")
+    WARM_ON_START: bool = Field(True, description="Run the start-up warm-up thread at all")
+    WARM_REPLAY: bool = Field(True, description="Pre-compute the 168 h replay nodes (cheap, ~90 s on one core)")
+    WARM_HYBRID: bool = Field(True, description="Train the hybrid and ML layers at start-up IF no build-time "
+                                                "cache is present. Leave true: with a cache it costs nothing, "
+                                                "and without one it is the only way those pages work at all.")
+    WARM_VALIDATION: bool = Field(True, description="Pre-run the acceptance suite so the page opens on a verdict")
+    REPLAY_STEPS_PER_HOUR: int = Field(
+        2, ge=1, le=12,
+        description="Resolution of the pre-computed replay grid. 2 (half-hourly) matches the "
+                    "finest step any page asks for, so every chart is served from the cache. "
+                    "Each step doubles both the build time and the resident memory of the cache, "
+                    "so raise it only alongside a page that actually samples that finely. Drop to "
+                    "1 if the deploy build runs out of time: only the Live instrument board "
+                    "then gets slower.")
     HYBRID_SAMPLES: int = Field(320, ge=60, le=1200,
                                 description="Design-of-experiments rows behind the hybrid models. "
                                             "Each row is one twin solve; lower it on constrained hardware.")

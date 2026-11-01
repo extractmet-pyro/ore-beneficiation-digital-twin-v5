@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from app.services.historian_service import REPLAY_HOURS, get_historian
-from app.services.live_service import current_hour
+from app.services.live_service import current_hour, whole_hour
 from app.services.plant_service import TAGS, get_plant_service
 
 
@@ -16,7 +16,7 @@ class DataQualityService:
         for spec in TAGS:
             vals, models = [], []
             for i in range(int(hours / step_h)):
-                h = (end - hours + i * step_h) % REPLAY_HOURS
+                h = whole_hour(end - hours + i * step_h)
                 vals.append(hist.tag_value(plant_id, spec["tag"], h, "measurement"))
                 models.append(hist.tag_value(plant_id, spec["tag"], h, "model"))
             v = np.array([x for x in vals if x is not None], dtype=float)
@@ -57,7 +57,7 @@ class DataQualityService:
         for spec in TAGS:
             gaps = 0
             for i in range(int(hours)):
-                h = (end - hours + i) % REPLAY_HOURS
+                h = whole_hour(end - hours + i)
                 if hist.tag_value(plant_id, spec["tag"], h, "measurement") is None:
                     gaps += 1
             out.append({"tag": spec["tag"], "label": spec["label"], "gaps_h": gaps,

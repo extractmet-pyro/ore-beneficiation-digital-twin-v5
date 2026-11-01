@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from app.services.historian_service import get_historian
-from app.services.live_service import current_hour
+from app.services.live_service import current_hour, whole_hour
 from app.services.plant_service import get_plant_service
 from app.services.simulation_service import get_simulation_service
 
@@ -149,7 +149,7 @@ class OverviewService:
         end = current_hour()
         rows = []
         for i in range(shifts):
-            start = (end - (i + 1) * 8) % 168
+            start = whole_hour(end - (i + 1) * 8)
             series = hist.kpi_series(plant_id, ["saleable_tph", "lump_fe_pct", "lump_al2o3_pct",
                                                 "fines_fe_pct", "fe_recovery_pct", "energy_kwh_t",
                                                 "margin_usd_h"],

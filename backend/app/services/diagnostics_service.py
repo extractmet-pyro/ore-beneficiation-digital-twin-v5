@@ -10,6 +10,17 @@ from app.services.simulation_service import get_simulation_service
 
 
 class DiagnosticsService:
+    """Balances, reconciliation and fault detection.
+
+    The residual sweep reads every PV and CV tag across a window of replay hours - about a
+    thousand historian lookups - which is the slowest thing on the diagnostics page. It is
+    deterministic within a replay hour, so the result is memoised on the integer hour and
+    recomputed when the replay moves on.
+    """
+
+    def __init__(self) -> None:
+        self._residuals: dict[tuple, dict] = {}
+
     # ---- balances ------------------------------------------------------------------------------
     def balance(self, plant_id: str) -> dict:
         """Solids, iron, alumina and water balance across the plant boundary.
@@ -133,11 +144,17 @@ class DiagnosticsService:
     def residuals(self, plant_id: str, hours: float = 48.0, step_h: float = 1.0) -> dict:
         hist = get_historian()
         end = current_hour()
+        key = (plant_id, float(hours), float(step_h), int(end))
+        cached = self._residuals.get(key)
+        if cached is not None:
+            return cached
         tags = [t["tag"] for t in TAGS if t["type"] in ("PV", "CV")]
         rows = {t: [] for t in tags}
         hrs = []
         for i in range(int(hours / step_h)):
-            h = (end - hours + i * step_h) % REPLAY_HOURS
+            # whole hours: these are hourly residuals, and a fractional hour misses the
+            # replay cache and rebuilds a snapshot that already exists
+            h = float(int(end - hours + i * step_h) % REPLAY_HOURS)
             hrs.append(round(h, 2))
             for t in tags:
                 m = hist.tag_value(plant_id, t, h, "measurement")
@@ -152,9 +169,11 @@ class DiagnosticsService:
                           "max_abs_pct": round(float(np.abs(v).max()), 3),
                           "status": "fault" if abs(v.mean()) > 8 or np.abs(v).max() > 20 else
                                     ("watch" if abs(v.mean()) > 3 else "normal")})
-        return {"plant_id": plant_id, "hours": hrs, "residual_pct": rows,
-                "summary": sorted(stats, key=lambda s: -abs(s["mean_pct"])),
-                "events": [e for e in EVENTS]}
+        out = {"plant_id": plant_id, "hours": hrs, "residual_pct": rows,
+               "summary": sorted(stats, key=lambda s: -abs(s["mean_pct"])),
+               "events": [e for e in EVENTS]}
+        self._residuals = {key: out}          # one hour's worth is all that is ever wanted
+        return out
 
     def event_catalogue(self) -> list[dict]:
         return get_historian().events()
